@@ -20,6 +20,8 @@ const AuthenticationsService = require('./services/postgres/AuthenticationsServi
 const TokenManager = require('./tokenize/TokenManager');
 const AuthenticationsValidator = require('./validator/authentications');
 
+const ClientError = require('./exceptions/ClientError'); // pastikan ini diimpor jika ClientError didefinisikan di file lain
+
 const init = async () => {
   const notesService = new NotesService();
   const usersService = new UsersService();
@@ -84,6 +86,35 @@ const init = async () => {
       },
     },
   ]);
+
+  // Menambahkan ekstensi untuk menangani error
+  server.ext('onPreResponse', (request, h) => {
+    const { response } = request;
+    if (response instanceof Error) {
+      // Penanganan client error secara internal.
+      if (response instanceof ClientError) {
+        const newResponse = h.response({
+          status: 'fail',
+          message: response.message,
+        });
+        newResponse.code(response.statusCode);
+        return newResponse;
+      }
+      // Mempertahankan penanganan client error oleh Hapi secara native, seperti 404, dll.
+      if (!response.isServer) {
+        return h.continue;
+      }
+      // Penanganan server error sesuai kebutuhan
+      const newResponse = h.response({
+        status: 'error',
+        message: 'terjadi kegagalan pada server kami',
+      });
+      newResponse.code(500);
+      return newResponse;
+    }
+    // Jika bukan error, lanjutkan dengan response sebelumnya (tanpa terintervensi)
+    return h.continue;
+  });
 
   await server.start();
   console.log(`Server berjalan pada ${server.info.uri}`);
